@@ -73,7 +73,9 @@ phantom "Server" player some mods (WebMap) inject never appears.
 
 ## Install
 
-Requires BepInEx 5.4.23.x on the server.
+Requires BepInEx 5.4.23.x on a Linux or Windows dedicated server. Grab
+`ValheimStatus.dll` from the [latest release] (or build it, below) and drop
+it in:
 
 ```
 BepInEx/plugins/ValheimStatus/ValheimStatus.dll
@@ -113,7 +115,12 @@ sudo RUN_AS="$(id -u steam):$(id -g steam)" ./build.sh   # only if the game dir 
 
 Build from any user's checkout that can read the game dir; the game user needs
 no access to this repo. Output: `out/ValheimStatus.dll`, the only file to
-deploy (copy it into the plugins dir and chown it to the game user).
+deploy (copy it into the plugins dir and chown it to the game user). Builds are
+deterministic; a release asset is reproducible from its tag.
+
+Releases: the tag, `<Version>` in the csproj and `Plugin.Version` are kept
+identical, so `plugin.version` in the JSON tells you which release a server
+runs.
 
 ## Rollback
 
@@ -132,3 +139,4 @@ the world.
   not this plugin.
 
 [BepInEx]: https://github.com/BepInEx/BepInEx
+[latest release]: https://github.com/harrisonpage/valheim-status/releases/latest
