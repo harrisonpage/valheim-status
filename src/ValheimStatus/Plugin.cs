@@ -10,7 +10,7 @@ namespace ValheimStatus
     {
         public const string Guid = "com.github.harrisonpage.valheimstatus";
         public const string Name = "ValheimStatus";
-        public const string Version = "1.0.1";
+        public const string Version = "1.1.0";
 
         private StatusCollector collector;
         private float nextWriteAt;          // Time.realtimeSinceStartup

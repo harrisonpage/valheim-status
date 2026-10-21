@@ -23,7 +23,11 @@ curl -s https://valheim.example.com/valheim.json | python3 -m json.tool
         "2552654088": {
             "player": "Bjorn",
             "start_time": 1789138000.0,
-            "character_id": "2552654088:7013"
+            "character_id": "2552654088:7013",
+            "x": 762, "y": 34, "z": -3335,
+            "biome": "Meadows",
+            "in_bed": false,
+            "dead": false
         }
     },
     "updated": 1789138868,
@@ -31,14 +35,26 @@ curl -s https://valheim.example.com/valheim.json | python3 -m json.tool
     "max_players": 10,
     "world": { "name": "Midgard", "seed_name": "AbCdEfGhIj", "seed": 123456 },
     "day": 12,
+    "day_length_sec": 1800,
     "day_fraction": 0.42,
     "clock": "10:04",
     "time_of_day": "morning",
     "bosses": ["defeated_eikthyr", "defeated_gdking"],
     "global_keys": ["defeated_eikthyr", "defeated_gdking"],
+    "in_bed": 0,
+    "wind": { "toward_deg": 214, "base": 0.63 },
+    "weather_by_biome": {
+        "Meadows": { "env": "Clear", "wind": 0.38 },
+        "Swamp": { "env": "SwampRain", "wind": 0.5 }
+    },
+    "events": [{ "type": "raid", "name": "army_eikthyr", "elapsed": 41, "duration": 90, "x": 700, "z": -3300 }],
+    "spawn": { "x": 12, "y": 31, "z": -8 },
+    "activity": [
+        { "time": 1789138000, "type": "join", "player": "Bjorn" }
+    ],
     "host": "valheim.example.com",
     "state": "running",
-    "plugin": { "name": "ValheimStatus", "version": "1.0.0" }
+    "plugin": { "name": "ValheimStatus", "version": "1.1.0" }
 }
 ```
 
@@ -51,18 +67,25 @@ a consumer written for that keeps working. Everything else is new.
 |---|---|---|
 | `version` | string or null | game version without the platform prefix (`l-1.0.12` -> `1.0.12`) |
 | `running` | bool | world is loaded and accepting players |
-| `players` | object | keyed by the player's user id (a numeric string). `player` is the display name, `start_time` a unix float of when this plugin first saw them (resets on server restart). `character_id` is the character ZDOID, null until spawned. `x`/`y`/`z` appear only per the `positions` setting |
+| `players` | object | keyed by the player's user id (a numeric string). `player` is the display name, `start_time` a unix float of when this plugin first saw them (resets on server restart). `character_id` is the character ZDOID, null until spawned. `x`/`y`/`z` and `biome` appear only per the `positions` setting. `in_bed` and `dead` come from the character |
 | `updated` | int | unix seconds of this write. Advances every `interval_seconds`, so a stale value means the server is down or wedged |
 | `uptime` | int | seconds since the world came up |
 | `max_players` | int | `max_players_default` from config (the server's limit is a launch flag the game does not expose) |
 | `version_string` | string | raw game version string |
 | `world` | object | `name`, `seed_name` (the string players type), `seed` (its int hash) |
 | `day` | int | in-game day number |
+| `day_length_sec` | int | real seconds per in-game day |
 | `day_fraction` | float | 0..1 through the current day |
 | `clock` | string | `day_fraction` as HH:MM, for humans |
 | `time_of_day` | string | `night`, `morning`, `afternoon` (from the game's own EnvMan checks) |
 | `bosses` | array | global keys starting with `defeated_`, raw, sorted |
 | `global_keys` | array | all global keys, sorted |
+| `in_bed` | int | characters in bed; the night is skipped when this equals the number online |
+| `wind` | object | `toward_deg`: compass direction the wind blows toward (0 = north/+z, 90 = east/+x), the same everywhere. `base`: 0..1 before weather scaling |
+| `weather_by_biome` | object | per biome, the weather (`env`) a client there would get right now and its wind strength 0..1. Replays the clients' time-seeded pick (the server never computes weather itself), so it is wrong inside dungeons, during raids and boss fights, and may differ in the few sectors with alternate weather |
+| `events` | array | in progress: today only `{type: "raid", name, elapsed, duration}` plus `x`/`z` unless `positions` is `never`. A raid is paused (elapsed stops) while nobody is near it |
+| `spawn` | object or null | start temple position |
+| `activity` | array | newest first, at most 20: `{time, type, player}` with type `join`, `leave` or `death`. In memory, so empty after a restart |
 | `host` | string or null | `host` from config, null if unset |
 | `state` | string | `starting` (plugin up, world not yet loaded), `running`, `stopping` (written once on clean shutdown) |
 | `plugin` | object | this plugin's name and version |
