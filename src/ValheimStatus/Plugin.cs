@@ -69,6 +69,7 @@ namespace ValheimStatus
             root.Add("uptime", ready ? (long)(now - serverUpSince) : 0L);
             if (ready) collector.Fill(root, players, now);
             else root.Add("max_players", PluginConfig.MaxPlayersDefault);
+            root.Add("host", HostOrNull());
             root.Add("state", ready ? "running" : "starting");
 
             AddPluginInfo(root);
@@ -87,10 +88,14 @@ namespace ValheimStatus
             root.Add("updated", (long)now);
             root.Add("uptime", 0L);
             root.Add("max_players", collector != null ? collector.MaxPlayersOrDefault() : PluginConfig.MaxPlayersDefault);
+            root.Add("host", HostOrNull());
             root.Add("state", "stopping");
             AddPluginInfo(root);
             Write(root);
         }
+
+        private static string HostOrNull() =>
+            string.IsNullOrEmpty(PluginConfig.Host) ? null : PluginConfig.Host;
 
         private static void AddPluginInfo(JsonObject root)
         {

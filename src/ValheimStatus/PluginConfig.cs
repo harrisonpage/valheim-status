@@ -13,6 +13,7 @@ namespace ValheimStatus
         public static float IntervalSeconds = 10f;
         public static bool Pretty = false;
         public static int MaxPlayersDefault = 10;
+        public static string Host = "";
         public static string Positions = "public";
         public static bool IncludeCharacterId = true;
         public static bool Debug = false;
@@ -34,6 +35,10 @@ namespace ValheimStatus
 
             MaxPlayersDefault = config.Bind("Server", "max_players_default", MaxPlayersDefault,
                 "Value of 'max_players' when it cannot be read from the game.").Value;
+
+            Host = config.Bind("Server", "host", Host,
+                "Value of 'host', e.g. the hostname players connect to; empty writes null.").Value;
+            Host = (Host ?? "").Trim();
 
             Positions = config.Bind("Players", "positions", Positions,
                 "When to include player x/y/z: 'public' (only players who enabled map visibility), 'always', or 'never'.").Value;

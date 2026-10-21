@@ -36,6 +36,7 @@ curl -s https://valheim.example.com/valheim.json | python3 -m json.tool
     "time_of_day": "morning",
     "bosses": ["defeated_eikthyr", "defeated_gdking"],
     "global_keys": ["defeated_eikthyr", "defeated_gdking"],
+    "host": "valheim.example.com",
     "state": "running",
     "plugin": { "name": "ValheimStatus", "version": "1.0.0" }
 }
@@ -62,6 +63,7 @@ a consumer written for that keeps working. Everything else is new.
 | `time_of_day` | string | `night`, `morning`, `afternoon` (from the game's own EnvMan checks) |
 | `bosses` | array | global keys starting with `defeated_`, raw, sorted |
 | `global_keys` | array | all global keys, sorted |
+| `host` | string or null | `host` from config, null if unset |
 | `state` | string | `starting` (plugin up, world not yet loaded), `running`, `stopping` (written once on clean shutdown) |
 | `plugin` | object | this plugin's name and version |
 
@@ -97,6 +99,7 @@ while the server is up survive.
 | `[Output] interval_seconds` | `10` | write period, min 1 |
 | `[Output] pretty` | `false` | indent the JSON |
 | `[Server] max_players_default` | `10` | reported as `max_players` |
+| `[Server] host` | empty | reported as `host` (null when empty) |
 | `[Players] positions` | `public` | `public` = only players with map visibility on, `always`, `never` |
 | `[Players] include_character_id` | `true` | |
 | `[Logging] debug` | `false` | log every write |
