@@ -96,6 +96,30 @@ crash the last file stays on disk with `running: true`.
 Players are read from the network peer list, not `ZNet.m_players`, so the
 phantom "Server" player some mods (WebMap) inject never appears.
 
+### events and activity
+
+```json
+"events": [
+    { "type": "raid", "name": "army_eikthyr", "elapsed": 47, "duration": 90, "x": 754, "z": -3310 }
+],
+"activity": [
+    { "time": 1792530912, "type": "death", "player": "Fel" },
+    { "time": 1792530640, "type": "leave", "player": "Kavion" },
+    { "time": 1792529931, "type": "join",  "player": "Kavion" },
+    { "time": 1792529455, "type": "join",  "player": "Fel" }
+]
+```
+
+`events` is `[]` when nothing is happening. A raid's `name` is the game's
+internal id (`army_eikthyr`, `army_theelder`, `foresttrolls`, `skeletons`,
+`blobs`, `wolves`, `bats`, ...), not the on-screen text, so map it yourself.
+`elapsed` stops while no player is near the raid, so `duration - elapsed` is not
+wall-clock time left.
+
+`activity` is kept in memory, so it starts empty on every server restart. A death is seen either as the
+character's `dead` flag or as the player getting a new character while still
+connected, so two deaths within one `interval_seconds` count as one.
+
 ## Install
 
 Requires BepInEx 5.4.23.x on a Linux or Windows dedicated server. Grab
