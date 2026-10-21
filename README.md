@@ -170,7 +170,16 @@ deterministic; a release asset is reproducible from its tag.
 
 Releases: the tag, `<Version>` in the csproj and `Plugin.Version` are kept
 identical, so `plugin.version` in the JSON tells you which release a server
-runs.
+runs. To cut one, bump both, commit and push, then:
+
+```bash
+BUILD_HOST=myserver VALHEIM_DIR=/opt/valheim ./release.sh
+```
+
+It builds the pushed commit in a fresh clone on `BUILD_HOST` (any ssh host with
+docker and the game installed), pushes the `v<version>` tag, and creates a
+draft release with the dll and its sha256 for you to review and publish. Needs
+`gh` logged in.
 
 ## Rollback
 
