@@ -27,7 +27,8 @@ curl -s https://valheim.example.com/valheim.json | python3 -m json.tool
             "x": 762, "y": 34, "z": -3335,
             "biome": "Meadows",
             "in_bed": false,
-            "dead": false
+            "dead": false,
+            "net": { "send_queue_bytes": 0, "out_bytes_sec": 48211, "in_bytes_sec": 3120 }
         }
     },
     "updated": 1789138868,
@@ -52,9 +53,14 @@ curl -s https://valheim.example.com/valheim.json | python3 -m json.tool
     "activity": [
         { "time": 1789138000, "type": "join", "player": "Bjorn" }
     ],
+    "server": {
+        "fps": 49.6, "target_fps": 60,
+        "frame_ms": { "avg": 20.2, "p99": 41.7, "max": 88.3 },
+        "slow_frames": 2, "window_sec": 10.0
+    },
     "host": "valheim.example.com",
     "state": "running",
-    "plugin": { "name": "ValheimStatus", "version": "1.1.0" }
+    "plugin": { "name": "ValheimStatus", "version": "1.2.0" }
 }
 ```
 
@@ -86,6 +92,7 @@ a consumer written for that keeps working. Everything else is new.
 | `events` | array | in progress: today only `{type: "raid", name, elapsed, duration}` plus `x`/`z` unless `positions` is `never`. A raid is paused (elapsed stops) while nobody is near it |
 | `spawn` | object or null | start temple position |
 | `activity` | array | newest first, at most 20: `{time, type, player}` with type `join`, `leave` or `death`. In memory, so empty after a restart |
+| `server` | object | frame times since the previous write (see below). Present while starting too |
 | `host` | string or null | `host` from config, null if unset |
 | `state` | string | `starting` (plugin up, world not yet loaded), `running`, `stopping` (written once on clean shutdown) |
 | `plugin` | object | this plugin's name and version |
@@ -95,6 +102,39 @@ crash the last file stays on disk with `running: true`.
 
 Players are read from the network peer list, not `ZNet.m_players`, so the
 phantom "Server" player some mods (WebMap) inject never appears.
+
+### server and net
+
+`server` covers every frame since the previous write (`window_sec`, about
+`interval_seconds`): `fps` is frames / window, `target_fps` is Unity's
+`Application.targetFrameRate` (-1 = uncapped), `frame_ms` has the average, 99th
+percentile and worst frame, and `slow_frames` counts frames over 50 ms (below
+20 fps). Network sends and AI run inside those frames, so a bad `max` or a run
+of `slow_frames` is the server itself stalling.
+
+Each player's `net` is the server's side of their connection:
+
+* `send_queue_bytes`: bytes waiting to reach that player (the game's own queue
+  plus Steam's pending and unacknowledged bytes). Near zero is healthy; a value
+  that keeps growing means the link cannot keep up with what the server sends.
+* `out_bytes_sec` / `in_bytes_sec`: average since the previous write, from the
+  socket's byte counters. `null` on a player's first write after joining.
+
+There is no ping: the game reads it through Steam's client API, which a
+dedicated server never starts.
+
+### perf log
+
+Set `[Logging] perf_log_path` to append one JSON line per write while anyone is
+online, for looking back at a laggy session:
+
+```json
+{"t":1789138868,"server":{"fps":49.6,"target_fps":60,"frame_ms":{"avg":20.2,"p99":41.7,"max":88.3},"slow_frames":2,"window_sec":10.0},"players":{"Bjorn":{"send_queue_bytes":0,"out_bytes_sec":48211,"in_bytes_sec":3120}}}
+```
+
+A line is about 180 bytes plus 80 per player, so 8 players for 4 hours is
+roughly 1.2 MB.
+The file is opened per line, so plain (renaming) logrotate works.
 
 ### events and activity
 
@@ -150,6 +190,7 @@ while the server is up survive.
 | `[Players] positions` | `public` | `public` = only players with map visibility on, `always`, `never` |
 | `[Players] include_character_id` | `true` | |
 | `[Logging] debug` | `false` | log every write |
+| `[Logging] perf_log_path` | empty | append perf lines here (see "perf log"); empty = off |
 
 ## Build
 

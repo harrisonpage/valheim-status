@@ -25,6 +25,11 @@ namespace ValheimStatus
         // rename, i.e. readers (nginx) see either the old or the new file, never a
         // partial one. Mono's File.Move refuses to overwrite and File.Replace refuses a
         // missing destination, hence the branch.
+        // Opened and closed on every call, so logrotate can rename the file away
+        // and the next append starts a fresh one.
+        public static void Append(string path, string contents) =>
+            File.AppendAllText(path, contents, Utf8NoBom);
+
         public static void Write(string path, string contents)
         {
             string tmp = TmpPath(path);

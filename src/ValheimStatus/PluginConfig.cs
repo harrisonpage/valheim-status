@@ -17,6 +17,7 @@ namespace ValheimStatus
         public static string Positions = "public";
         public static bool IncludeCharacterId = true;
         public static bool Debug = false;
+        public static string PerfLogPath = "";
 
         public static void Bind(ConfigFile config)
         {
@@ -50,6 +51,11 @@ namespace ValheimStatus
 
             Debug = config.Bind("Logging", "debug", Debug,
                 "Log a line on every write.").Value;
+
+            PerfLogPath = config.Bind("Logging", "perf_log_path", PerfLogPath,
+                "Append one JSON line of server frame times and per-player network stats per write, while anyone is online. Empty disables it; relative paths are resolved against the BepInEx directory. Rotate it externally.").Value;
+            PerfLogPath = (PerfLogPath ?? "").Trim();
+            if (PerfLogPath != "" && !Path.IsPathRooted(PerfLogPath)) PerfLogPath = Path.Combine(Paths.BepInExRootPath, PerfLogPath);
         }
 
         private static string PluginDir()

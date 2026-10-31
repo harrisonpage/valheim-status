@@ -10,9 +10,10 @@ namespace ValheimStatus
     {
         public const string Guid = "com.github.harrisonpage.valheimstatus";
         public const string Name = "ValheimStatus";
-        public const string Version = "1.1.0";
+        public const string Version = "1.2.0";
 
         private StatusCollector collector;
+        private readonly FrameStats frames = new FrameStats();
         private float nextWriteAt;          // Time.realtimeSinceStartup
         private double serverUpSince;       // unix seconds, 0 until the world is up
         private bool finalWritten;
@@ -36,6 +37,7 @@ namespace ValheimStatus
 
         private void Update()
         {
+            frames.Sample(Time.unscaledDeltaTime);
             if (Time.realtimeSinceStartup < nextWriteAt) return;
             nextWriteAt = Time.realtimeSinceStartup + PluginConfig.IntervalSeconds;
             WriteSnapshot();
@@ -69,11 +71,45 @@ namespace ValheimStatus
             root.Add("uptime", ready ? (long)(now - serverUpSince) : 0L);
             if (ready) collector.Fill(root, players, now);
             else root.Add("max_players", PluginConfig.MaxPlayersDefault);
+            JsonObject server = frames.TakeSnapshot();
+            root.Add("server", server);
             root.Add("host", HostOrNull());
             root.Add("state", ready ? "running" : "starting");
 
             AddPluginInfo(root);
             Write(root);
+            if (ready && players.Count > 0) AppendPerfLog((long)now, server, players);
+        }
+
+        // One compact line per write while anyone is online: the server block and
+        // each player's net block, keyed by name. No positions.
+        private void AppendPerfLog(long now, JsonObject server, JsonObject players)
+        {
+            if (string.IsNullOrEmpty(PluginConfig.PerfLogPath)) return;
+            try
+            {
+                var byName = new JsonObject();
+                foreach (var kv in players)
+                {
+                    string name = kv.Key;
+                    object net = null;
+                    foreach (var f in (JsonObject)kv.Value)
+                    {
+                        if (f.Key == "player" && f.Value is string s) name = s;
+                        else if (f.Key == "net") net = f.Value;
+                    }
+                    byName.Add(name, net);
+                }
+                var line = new JsonObject();
+                line.Add("t", now);
+                line.Add("server", server);
+                line.Add("players", byName);
+                AtomicFile.Append(PluginConfig.PerfLogPath, Json.Serialize(line, false) + "\n");
+            }
+            catch (Exception e)
+            {
+                LogOnce("perf_log", e);
+            }
         }
 
         private void WriteFinal()

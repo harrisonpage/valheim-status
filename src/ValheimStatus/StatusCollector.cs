@@ -20,6 +20,7 @@ namespace ValheimStatus
         private readonly Dictionary<long, string> names = new Dictionary<long, string>();
         private readonly Dictionary<long, ZDOID> lastCharacter = new Dictionary<long, ZDOID>();
         private readonly Dictionary<long, ZDOID> deathCounted = new Dictionary<long, ZDOID>();
+        private readonly Dictionary<long, double> lastNetStats = new Dictionary<long, double>();   // unix seconds of the last GetAndResetStats
         private readonly List<JsonObject> activity = new List<JsonObject>();   // newest first
         private JsonObject spawn;   // the start temple never moves; found once
 
@@ -129,6 +130,7 @@ namespace ValheimStatus
                     Try("biome", () => p.Add("biome", WorldGenerator.instance.GetBiome(pos).ToString()));
                 }
                 Try("player_state", () => AddPlayerState(p, peer, now));
+                Try("net", () => p.Add("net", Net(peer, now)));
                 players.Add(peer.m_uid.ToString(), p);
             }
 
@@ -142,7 +144,37 @@ namespace ValheimStatus
                 names.Remove(uid);
                 lastCharacter.Remove(uid);
                 deathCounted.Remove(uid);
+                lastNetStats.Remove(uid);
             }
+        }
+
+        // The server's view of one peer's connection. send_queue_bytes is
+        // ZSteamSocket.GetSendQueueSize: the game's own queue plus Steam's pending
+        // and sent-but-unacked bytes, so it grows when the server produces more
+        // than the link drains. Byte rates come from GetAndResetStats (counters
+        // since the previous call, which nothing else on a server makes), so they
+        // are null on a player's first write. GetConnectionQuality would give ping,
+        // but it calls Steam's client API, which a dedicated server never starts.
+        private JsonObject Net(ZNetPeer peer, double now)
+        {
+            ISocket socket = peer.m_socket;
+            if (socket == null) return null;
+            var o = new JsonObject();
+            o.Add("send_queue_bytes", socket.GetSendQueueSize());
+            socket.GetAndResetStats(out int sent, out int recv);
+            double since = lastNetStats.TryGetValue(peer.m_uid, out double t) ? now - t : 0;
+            lastNetStats[peer.m_uid] = now;
+            if (since > 0)
+            {
+                o.Add("out_bytes_sec", (long)Math.Round(sent / since));
+                o.Add("in_bytes_sec", (long)Math.Round(recv / since));
+            }
+            else
+            {
+                o.Add("out_bytes_sec", null);
+                o.Add("in_bytes_sec", null);
+            }
+            return o;
         }
 
         // in_bed and dead come from the character ZDO, which the server holds for
