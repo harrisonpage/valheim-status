@@ -20,7 +20,9 @@ namespace ValheimStatus
         private readonly Dictionary<long, string> names = new Dictionary<long, string>();
         private readonly Dictionary<long, ZDOID> lastCharacter = new Dictionary<long, ZDOID>();
         private readonly Dictionary<long, ZDOID> deathCounted = new Dictionary<long, ZDOID>();
-        private readonly Dictionary<long, double> lastNetStats = new Dictionary<long, double>();   // unix seconds of the last GetAndResetStats
+        private Dictionary<long, int> sendTurns = new Dictionary<long, int>();   // this write's SendCounter window
+        private Dictionary<long, int> sendSent = new Dictionary<long, int>();
+        private double sendWindowSec;
         private readonly List<JsonObject> activity = new List<JsonObject>();   // newest first
         private JsonObject spawn;   // the start temple never moves; found once
 
@@ -104,6 +106,7 @@ namespace ValheimStatus
         // old log-based producer keyed on (the ZDOID user id == peer m_uid).
         private void AddPlayers(JsonObject players, double now)
         {
+            sendWindowSec = SendCounter.TakeWindow(out sendTurns, out sendSent);
             var seen = new HashSet<long>();
             foreach (ZNetPeer peer in ZNet.instance.GetPeers())
             {
@@ -130,7 +133,7 @@ namespace ValheimStatus
                     Try("biome", () => p.Add("biome", WorldGenerator.instance.GetBiome(pos).ToString()));
                 }
                 Try("player_state", () => AddPlayerState(p, peer, now));
-                Try("net", () => p.Add("net", Net(peer, now)));
+                Try("net", () => p.Add("net", Net(peer)));
                 players.Add(peer.m_uid.ToString(), p);
             }
 
@@ -144,37 +147,33 @@ namespace ValheimStatus
                 names.Remove(uid);
                 lastCharacter.Remove(uid);
                 deathCounted.Remove(uid);
-                lastNetStats.Remove(uid);
             }
         }
 
         // The server's view of one peer's connection. send_queue_bytes is
-        // ZSteamSocket.GetSendQueueSize: the game's own queue plus Steam's pending
-        // and sent-but-unacked bytes, so it grows when the server produces more
-        // than the link drains. Byte rates come from GetAndResetStats (counters
-        // since the previous call, which nothing else on a server makes), so they
-        // are null on a player's first write. GetConnectionQuality would give ping,
-        // but it calls Steam's client API, which a dedicated server never starts.
-        private JsonObject Net(ZNetPeer peer, double now)
+        // ISocket.GetSendQueueSize (for Steam: the game's own queue plus Steam's
+        // pending and sent-but-unacked bytes), so it grows when the server produces
+        // more than the link drains. updates_sec / sends_sec come from SendCounter:
+        // low on a player's first write (they joined mid-window), null if they had
+        // no turn yet or the patch did not install. The rest comes from SteamNet.
+        private JsonObject Net(ZNetPeer peer)
         {
             ISocket socket = peer.m_socket;
             if (socket == null) return null;
             var o = new JsonObject();
             o.Add("send_queue_bytes", socket.GetSendQueueSize());
-            socket.GetAndResetStats(out int sent, out int recv);
-            double since = lastNetStats.TryGetValue(peer.m_uid, out double t) ? now - t : 0;
-            lastNetStats[peer.m_uid] = now;
-            if (since > 0)
-            {
-                o.Add("out_bytes_sec", (long)Math.Round(sent / since));
-                o.Add("in_bytes_sec", (long)Math.Round(recv / since));
-            }
-            else
-            {
-                o.Add("out_bytes_sec", null);
-                o.Add("in_bytes_sec", null);
-            }
+            bool counted = sendWindowSec > 0 && sendTurns.ContainsKey(peer.m_uid);
+            o.Add("updates_sec", counted ? Math.Round(sendTurns[peer.m_uid] / sendWindowSec, 1) : (object)null);
+            o.Add("sends_sec", counted ? Math.Round((sendSent.TryGetValue(peer.m_uid, out int n) ? n : 0) / sendWindowSec, 1) : (object)null);
+            Try("net_steam", () => SteamNet.AddStatus(o, socket));
             return o;
+        }
+
+        // Scheduler facts for the "server" block.
+        public void AddSendInfo(JsonObject server)
+        {
+            Try("send_fps", () => server.Add("send_fps", SendCounter.TargetFps()));
+            server.Add("send_counter", SendCounter.Installed);
         }
 
         // in_bed and dead come from the character ZDO, which the server holds for

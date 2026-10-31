@@ -32,7 +32,21 @@ namespace ValheimStatus
             {
                 Logger.LogError($"cannot prepare {PluginConfig.OutputPath}: {e.Message}");
             }
+            InstallSendCounter();
             Logger.LogInfo($"{Name} {Version}: writing {PluginConfig.OutputPath} every {PluginConfig.IntervalSeconds}s");
+        }
+
+        // Its own method so a missing Harmony assembly fails here, not in Awake.
+        private void InstallSendCounter()
+        {
+            try
+            {
+                SendCounter.Install(new HarmonyLib.Harmony(Guid));
+            }
+            catch (Exception e)
+            {
+                Logger.LogWarning($"send counter not installed, no updates_sec: {e.GetType().Name}: {e.Message}");
+            }
         }
 
         private void Update()
@@ -72,6 +86,7 @@ namespace ValheimStatus
             if (ready) collector.Fill(root, players, now);
             else root.Add("max_players", PluginConfig.MaxPlayersDefault);
             JsonObject server = frames.TakeSnapshot();
+            if (ready) collector.AddSendInfo(server);
             root.Add("server", server);
             root.Add("host", HostOrNull());
             root.Add("state", ready ? "running" : "starting");

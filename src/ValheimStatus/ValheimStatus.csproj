@@ -1,9 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     Compiled against the game's own assemblies (mounted at /game by build.sh) and
-    the installed BepInEx core (/bepinex). No NuGet, no Harmony, no publicizer:
-    the plugin only reads public game API, so a game update can only break it by
-    changing public members, and each read is isolated in its own try/catch.
+    the installed BepInEx core (/bepinex). No NuGet, no publicizer. Nearly all
+    reads use public game API; the exceptions (SendCounter's postfix on the
+    private ZDOMan.SendZDOs, SteamNet's read of ZSteamSocket.m_con) go through
+    reflection, so a game update that renames them loses those keys only. Each
+    read is isolated in its own try/catch.
   -->
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
@@ -26,6 +28,14 @@
   <ItemGroup>
     <Reference Include="BepInEx">
       <HintPath>$(BepInExCore)/BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExCore)/0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="com.rlabrecque.steamworks.net">
+      <HintPath>$(GameManaged)/com.rlabrecque.steamworks.net.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="assembly_valheim">

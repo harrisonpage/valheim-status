@@ -28,7 +28,12 @@ curl -s https://valheim.example.com/valheim.json | python3 -m json.tool
             "biome": "Meadows",
             "in_bed": false,
             "dead": false,
-            "net": { "send_queue_bytes": 0, "out_bytes_sec": 48211, "in_bytes_sec": 3120 }
+            "net": {
+                "send_queue_bytes": 0, "updates_sec": 6.6, "sends_sec": 6.5,
+                "ping_ms": 38, "queue_ms": 0.0,
+                "out_bytes_sec": 48211, "in_bytes_sec": 3120, "send_rate_bytes_sec": 153600,
+                "quality_local": 1.0, "quality_remote": 1.0
+            }
         }
     },
     "updated": 1789138868,
@@ -56,7 +61,8 @@ curl -s https://valheim.example.com/valheim.json | python3 -m json.tool
     "server": {
         "fps": 49.6, "target_fps": 60,
         "frame_ms": { "avg": 20.2, "p99": 41.7, "max": 88.3 },
-        "slow_frames": 2, "window_sec": 10.0
+        "slow_frames": 2, "window_sec": 10.0,
+        "send_fps": 20.0, "send_counter": true
     },
     "host": "valheim.example.com",
     "state": "running",
@@ -110,18 +116,42 @@ phantom "Server" player some mods (WebMap) inject never appears.
 `Application.targetFrameRate` (-1 = uncapped), `frame_ms` has the average, 99th
 percentile and worst frame, and `slow_frames` counts frames over 50 ms (below
 20 fps). Network sends and AI run inside those frames, so a bad `max` or a run
-of `slow_frames` is the server itself stalling.
+of `slow_frames` is the server itself stalling. `send_fps` is the game's world
+update rate (`ZDOMan.c_SendFPS`, 20 in vanilla) and `send_counter` says whether
+the patch behind `updates_sec` installed.
 
 Each player's `net` is the server's side of their connection:
 
 * `send_queue_bytes`: bytes waiting to reach that player (the game's own queue
   plus Steam's pending and unacknowledged bytes). Near zero is healthy; a value
   that keeps growing means the link cannot keep up with what the server sends.
-* `out_bytes_sec` / `in_bytes_sec`: average since the previous write, from the
-  socket's byte counters. `null` on a player's first write after joining.
+* `updates_sec`: how often the server gave this player a world update turn,
+  counted by a Harmony postfix on `ZDOMan.SendZDOs` (the plugin's only patch;
+  it changes nothing). `sends_sec` counts the turns that actually sent
+  something; a turn sends nothing when there was nothing new or the queue was
+  too full. Low on a player's first write (they joined mid-window); `null` if
+  they had no turn yet or the patch did not install.
+* From Steam (`GetConnectionRealTimeStatus` on the game-server API; the game's
+  own wrapper asks the client API, which a dedicated server never starts):
+  `ping_ms`, `queue_ms` (how long a new message would wait to go out),
+  `out_bytes_sec` / `in_bytes_sec`, `send_rate_bytes_sec` (the bandwidth Steam
+  estimates the link allows) and `quality_local` / `quality_remote` (0..1
+  fraction of packets delivered each way, -1 if unknown). Missing for non-Steam
+  sockets.
 
-There is no ping: the game reads it through Steam's client API, which a
-dedicated server never starts.
+Vanilla gives one player a turn per frame and starts a new round at most
+`send_fps` times a second, so each player's ceiling is about
+`min(send_fps, fps / (players + 1))`: 8 players at 60 fps get about 6.7
+updates/sec. Reading the numbers together:
+
+* `updates_sec` low and tracking `fps`: the scheduler or server CPU is the limit.
+* `updates_sec` steady but `queue_ms` and `send_queue_bytes` climbing, and
+  `out_bytes_sec` pinned near `send_rate_bytes_sec`: bandwidth is the limit.
+* `sends_sec` well below `updates_sec` while the queue is full: the game is
+  skipping turns to let the queue drain.
+
+All of it is measured the same way whatever networking mods are installed, as
+long as they still send through `SendZDOs` and Steam sockets.
 
 ### perf log
 
@@ -129,11 +159,11 @@ Set `[Logging] perf_log_path` to append one JSON line per write while anyone is
 online, for looking back at a laggy session:
 
 ```json
-{"t":1789138868,"server":{"fps":49.6,"target_fps":60,"frame_ms":{"avg":20.2,"p99":41.7,"max":88.3},"slow_frames":2,"window_sec":10.0},"players":{"Bjorn":{"send_queue_bytes":0,"out_bytes_sec":48211,"in_bytes_sec":3120}}}
+{"t":1789138868,"server":{"fps":49.6,"target_fps":60,"frame_ms":{"avg":20.2,"p99":41.7,"max":88.3},"slow_frames":2,"window_sec":10.0,"send_fps":20.0,"send_counter":true},"players":{"Bjorn":{"send_queue_bytes":0,"updates_sec":6.6,"sends_sec":6.5,"ping_ms":38,"queue_ms":0.0,"out_bytes_sec":48211,"in_bytes_sec":3120,"send_rate_bytes_sec":153600,"quality_local":1.0,"quality_remote":1.0}}}
 ```
 
-A line is about 180 bytes plus 80 per player, so 8 players for 4 hours is
-roughly 1.2 MB.
+A line is about 220 bytes plus 230 per player, so 8 players for 4 hours is
+roughly 3 MB.
 The file is opened per line, so plain (renaming) logrotate works.
 
 ### events and activity
